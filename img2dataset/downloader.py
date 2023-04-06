@@ -16,7 +16,6 @@ import fsspec
 from .logger import CappedCounter
 from .logger import write_stats
 
-
 def is_disallowed(headers, user_agent_token, disallowed_header_directives):
     """Check if HTTP headers contain an X-Robots-Tag directive disallowing usage"""
     for values in headers.get_all("X-Robots-Tag", []):
@@ -42,8 +41,27 @@ def download_image(row, timeout, user_agent_token, disallowed_header_directives)
     if user_agent_token:
         user_agent_string += f" (compatible; {user_agent_token}; +https://github.com/rom1504/img2dataset)"
     try:
-        request = urllib.request.Request(url, data=None, headers={"User-Agent": user_agent_string})
-        with urllib.request.urlopen(request, timeout=timeout) as r:
+        # Define custom DNS server IP address
+        custom_dns_server = '8.8.8.8'
+
+        # Define custom HTTPHandler with custom DNS server and user agent string
+        class CustomHTTPHandler(urllib.request.HTTPHandler):
+            def __init__(self):
+                self.dns_cache = { '': custom_dns_server }
+                self.user_agent = user_agent_string
+
+            def http_open(self, req):
+                req.add_header('User-Agent', self.user_agent)
+                return self.do_open(self.getConnection, req)
+
+        # Create custom HTTPHandler object and build opener
+        opener = urllib.request.build_opener(CustomHTTPHandler())
+
+        # Create request object with custom headers
+        request = urllib.request.Request(url)
+
+        # Make request with custom opener
+        with opener.open(request, timeout=timeout) as r:
             if disallowed_header_directives and is_disallowed(
                 r.headers,
                 user_agent_token,
